@@ -12,6 +12,7 @@
              condor,
              condor_app,
              condor_sup,
+             condor_packet,
              condor_listener,
              condor_listener_sup
             ]},
