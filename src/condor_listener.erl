@@ -21,26 +21,24 @@
 %% -----------------------------------------------------------------------------
 %% condor_listener behaviour
 %% -----------------------------------------------------------------------------
--type sock() :: gen_tcp:sock().
--type payload() :: binary().
+-type sock() :: inet:socket().
+-type packet() :: binary().
 -type msg() :: term().
 -type state() :: term().
 -type terminate_reason() :: term().
 
--callback init(state()) ->
-    {ok, state()} |
-    {send, payload(), state()} |
-    {stop, terminate_reason(), state()}.
+-type result() :: {ok, state()}
+                | {send, packet(), state()}
+                | {stop, terminate_reason(), state()}.
 
--callback handle_packet(payload(), state()) ->
-    {ok, state()} |
-    {send, payload(), state()} |
-    {stop, terminate_reason(), state()}.
+-callback init(state()) ->
+    result().
+
+-callback handle_packet(packet(), state()) ->
+    result().
 
 -callback handle_info(msg(), state()) ->
-    {ok, state()} |
-    {send, payload(), state()} |
-    {stop, terminate_reason(), state()}.
+    result().
 
 -callback terminate(terminate_reason(), state()) ->
     ok.
@@ -50,9 +48,9 @@
 -record(state, {mod :: module(),
                 mod_init_state :: term(),
                 mod_state :: term(),
-                lsock :: sock(),
-                sock :: sock(),
-                len = 8 :: non_neg_integer(),
+                lsock :: undefined | sock(),
+                sock :: undefined | sock(),
+                len = 16 :: 8 | 16 | 32,
                 buffer = <<>> :: binary()}).
 
 %% -----------------------------------------------------------------------------
