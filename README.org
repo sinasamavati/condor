@@ -41,7 +41,9 @@
    - Reusable supervised connection acceptors
    - Neat frames/buffers
 
-** TODO Write API documentation
+** API
+
+   TODO
 
 ** License
 
