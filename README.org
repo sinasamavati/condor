@@ -1,6 +1,6 @@
 * Condor
 
-  A minimal library for building TCP servers in Erlang.
+  Condor is a minimal library for building scalable TCP servers in Erlang.
 
 ** Quick Overview
 
@@ -28,12 +28,11 @@
    #+END_SRC
 
    #+BEGIN_SRC
-   1> ok = application:start(condor),
-      Name = ping_server,
-      Opts = #{max_acceptors => 100, port => 8890, packet => 1},
-      Module = ping_server,
-      InitialState = [],
-      condor:start_listener(ping_server, Opts, Module, InitialState).
+   Name = ping_server,
+   Opts = #{max_acceptors => 100, port => 8890, packet => 1},
+   Module = ping_server,
+   InitialState = [],
+   condor:start_listener(ping_server, Opts, Module, InitialState).
    #+END_SRC
 
 ** Features
@@ -43,7 +42,83 @@
 
 ** API
 
-   TODO
+*** Start a Listener
+
+    #+BEGIN_SRC
+    condor:start_listener(Name, Opts, Module, InitialState) ->
+        {ok, Pid} | {error, Reason}
+
+    Name = atom()
+    Opts = #{
+             ip => inet:ip_address(),
+             port => inet:port_number(),
+             max_acceptors => non_neg_integer(),
+             len => 1 | 2 | 4
+           }
+   Module = atom()
+   InitialState = any()
+   Pid = pid()
+   Reason = any()
+   #+END_SRC
+
+*** Stop a Listener
+
+    #+BEGIN_SRC
+    condor:stop_listener(Name) -> ok
+
+    Name = atom()
+    #+END_SRC
+
+*** Condor Listener Callbacks
+
+    Behaviour: ~condor_listener~
+
+    #+BEGIN_SRC
+    init(State) -> Result
+
+    handle_packet(Packet, State) -> Result
+
+    handle_info(Msg, State) -> Result
+
+    terminate(Reason, State) -> ok
+
+    Result = {ok, State}
+           | {send, Packet, State}
+           | {stop, Reason, State}
+
+    Packet = binary()
+    State = any()
+    Reason = atom()
+    #+END_SRC
+
+    Events that invoke callbacks:
+
+    #+BEGIN_SRC
+    event                       callback module
+    -----                       ---------------
+    new connection         ---> Module:init/1
+    new packet             ---> Module:handle_packet/2
+    connection termination ---> Module:terminate/2
+    receiving a message    ---> Module:handle_info/2
+    #+END_SRC
+
+    Condor takes care of framing packets. Each packet frame consists of two
+    segments: ~Len | Packet~.
+
+    ~Len~ indicates the length of ~Packet~ in big-endian order.
+
+    The length of ~Len~ is two bytes by default, though it can be modified with
+    the ~len~ option.
+
+    Condor also takes care of buffering. So, ~Module:handle_packet/2~ is called
+    only when an entire packet is received. That is, when ~Packet~ is buffered
+    according to the value of ~Len~. ~Len~ will then be stripped off, and only
+    ~Packet~ will be passed to ~Module:handle_packet/2~.
+
+    A callback's ~Result~:
+
+    - ~{send, Packet, State}~ sends ~Packet~ (in the frame: ~Len | Packet~).
+    - ~{stop, Reason, State}~ terminates the connection.
 
 ** License
 
