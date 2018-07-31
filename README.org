@@ -5,11 +5,11 @@
 ** Quick Overview
 
    #+BEGIN_SRC erlang
-   -module(ping_server)
-   -behaviour(condor_listener)
+   -module(ping_server).
+   -behaviour(condor_listener).
 
    %% condor_listener callbacks
-   -export([init/1])
+   -export([init/1]).
    -export([handle_packet/2]).
    -export([handle_info/2]).
    -export([terminate/2]).
