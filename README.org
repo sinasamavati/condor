@@ -1,0 +1,46 @@
+* Condor
+
+  A minimal library for building TCP servers in Erlang.
+
+** Quick Overview
+
+   #+BEGIN_SRC erlang
+   -module(ping_server)
+   -behaviour(condor_listener)
+
+   %% condor_listener callbacks
+   -export([init/1])
+   -export([handle_packet/2]).
+   -export([handle_info/2]).
+   -export([terminate/2]).
+
+   init([]) ->
+       {ok, undefined}.
+
+   handle_packet(<<"ping">>, State) ->
+       {send, <<"pong">>, State}.
+
+   handle_info(_Msg, State) ->
+       {ok, State}.
+
+   terminate(_Reason, _State) ->
+       ok.
+   #+END_SRC
+
+   #+BEGIN_SRC
+   1> ok = application:start(condor),
+      Name = ping_server,
+      Opts = #{max_acceptors => 100, port => 8890, packet => 1},
+      Module = ping_server,
+      InitialState = [],
+      condor:start_listener(ping_server, Opts, Module, []).
+   #+END_SRC
+
+** Features
+
+   - Reusable supervised acceptors
+   - Neat frames/buffers
+
+** License
+
+   Apache License, Version 2.0
