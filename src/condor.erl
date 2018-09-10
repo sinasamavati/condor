@@ -9,7 +9,7 @@
 -type opts() :: #{
             ip => inet:ip_address(),
             port => inet:port_number(),
-            len => 1 | 2 | 4,
+            len => 1 | 2,
             max_acceptors => non_neg_integer()
            }.
 -export_type([opts/0]).
@@ -19,6 +19,7 @@
 start_listener(Name, Opts0, Mod, InitialModState) ->
     SupName = listener_sup_name(Name),
     Opts = maps:merge(default_opts(), Opts0),
+    ok = check_opts(Opts),
     Res = condor_sup:start_listener_sup(SupName, Opts, Mod, InitialModState),
     start_acceptors(Res, SupName, Opts).
 
@@ -37,6 +38,12 @@ default_opts() ->
        len => 2,
        max_acceptors => 100
      }.
+
+-spec check_opts(opts()) -> ok | no_return().
+check_opts(#{len:=Len}) when Len > 2 ->
+    exit(badarg, len_too_big);
+check_opts(_) ->
+    ok.
 
 -spec start_acceptors(Res, atom(), opts()) ->
                              Res when Res :: {ok, pid()}
