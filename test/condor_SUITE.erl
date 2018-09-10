@@ -11,7 +11,7 @@
 init_per_suite(Config) ->
     ok = application:start(condor),
     Port = crypto:rand_uniform(3000, 9999),
-    Opts = #{port => Port, max_acceptors => 100, len => 2},
+    Opts = #{port => Port, max_acceptors => 5, len => 2},
     {ok, _} = condor:start_listener(echo_server, Opts, ?MODULE, []),
     [{port, Port} | Config].
 
@@ -35,20 +35,39 @@ condor_packet(_) ->
 
 echo_test(Config) ->
     Port = ?config(port, Config),
-    {ok, Sock} = gen_tcp:connect("localhost", Port, [binary]),
-    Packet = condor_packet:encode(16, ["A" || _ <- lists:seq(1, 1024)]),
-    gen_tcp:send(Sock, Packet),
-    receive
-        {tcp, Sock, Packet} ->
-            ok
-    after 100 ->
-            exit(not_received)
-    end,
-    %% TODO: add more tests
+
+    {ok, Sock0} = gen_tcp:connect("localhost", Port, [binary]),
+    Pkt0 = condor_packet:encode(16, ["A" || _ <- lists:seq(1, 1024)]),
+    gen_tcp:send(Sock0, Pkt0),
+    Pkt0 = loop_recv(Sock0),
+
+    {ok, Sock1} = gen_tcp:connect("localhost", Port, [binary]),
+    Pkt1 = condor_packet:encode(16, ["ABC" ||
+                                        _ <- lists:seq(1, 10240)]),
+    gen_tcp:send(Sock1, Pkt1),
+    Pkt1 = loop_recv(Sock1),
+
+    gen_tcp:close(Sock0),
+    gen_tcp:close(Sock1),
     ok.
 
 %% -----------------------------------------------------------------------------
+%% internal
+%% -----------------------------------------------------------------------------
+loop_recv(Sock) ->
+    loop_recv(Sock, <<>>).
+
+loop_recv(Sock, Buffer) ->
+    receive
+        {tcp, Sock, Pkt} ->
+            loop_recv(Sock, <<Buffer/binary, Pkt/binary>>)
+    after 10 ->
+            Buffer
+    end.
+
+%% -----------------------------------------------------------------------------
 %% condor_listener callbacks
+%% -----------------------------------------------------------------------------
 init([]) ->
     {ok, undefined}.
 
