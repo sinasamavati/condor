@@ -29,7 +29,8 @@
 
 -type result() :: {ok, state()}
                 | {send, packet(), state()}
-                | {stop, terminate_reason(), state()}.
+                | {stop, terminate_reason(), state()}
+                | {send_and_stop, packet(), terminate_reason(), state()}.
 
 -callback init(state()) ->
     result().
@@ -150,6 +151,11 @@ handle_callback(M, F, A, State) ->
             State#state{mod_state = ModState};
         {stop, Reason, ModState} ->
             %% terminate/2 callback and reuse the process
+            accept(self()),
+            handle_callback(M, terminate, [Reason, ModState], State);
+        {send_and_stop, Data, Reason, ModState} ->
+            %% send data, then terminate/2 callback and reuse the process
+            send(Data, State),
             accept(self()),
             handle_callback(M, terminate, [Reason, ModState], State);
         Else ->

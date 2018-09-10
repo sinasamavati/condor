@@ -42,10 +42,20 @@ echo_test(Config) ->
     Pkt0 = loop_recv(Sock0),
 
     {ok, Sock1} = gen_tcp:connect("localhost", Port, [binary]),
-    Pkt1 = condor_packet:encode(16, ["ABC" ||
-                                        _ <- lists:seq(1, 10240)]),
+    Pkt1 = condor_packet:encode(16, ["ABC" || _ <- lists:seq(1, 10240)]),
     gen_tcp:send(Sock1, Pkt1),
     Pkt1 = loop_recv(Sock1),
+
+    {ok, Sock2} = gen_tcp:connect("localhost", Port, [binary]),
+    Pkt2 = condor_packet:encode(16, <<"send_and_stop">>),
+    gen_tcp:send(Sock2, Pkt2),
+    Pkt2 = loop_recv(Sock2),
+    receive
+        {tcp_closed, Sock2} ->
+            ok
+    after 10 ->
+            exit(tcp_not_closed)
+    end,
 
     gen_tcp:close(Sock0),
     gen_tcp:close(Sock1),
@@ -71,6 +81,8 @@ loop_recv(Sock, Buffer) ->
 init([]) ->
     {ok, undefined}.
 
+handle_packet(<<"send_and_stop">> = Data, State) ->
+    {send_and_stop, Data, normal, State};
 handle_packet(Echo, State) ->
     {send, Echo, State}.
 

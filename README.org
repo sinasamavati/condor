@@ -17,6 +17,8 @@
    init([]) ->
        {ok, undefined}.
 
+   handle_packet(<<"stop">>, State) ->
+       {send_and_stop, <<"ok">>, normal, State};
    handle_packet(<<"ping">>, State) ->
        {send, <<"pong">>, State}.
 
@@ -53,7 +55,7 @@
              ip => inet:ip_address(),
              port => inet:port_number(),
              max_acceptors => non_neg_integer(),
-             len => 1 | 2 | 4
+             len => 1 | 2
            }
    Module = atom()
    InitialState = any()
@@ -85,6 +87,7 @@
     Result = {ok, State}
            | {send, Packet, State}
            | {stop, Reason, State}
+           | {send_and_stop, Packet, Reason, State}
 
     Packet = binary()
     State = any()
@@ -119,6 +122,8 @@
 
     - ~{send, Packet, State}~ sends ~Packet~ (in the frame: ~Len | Packet~).
     - ~{stop, Reason, State}~ terminates the connection.
+    - ~{send_and_stop, Packet, Reason, State}~ sends ~Packet~ (in the frame:
+      ~Len | Packet~), and then terminates the connection.
 
 ** License
 
