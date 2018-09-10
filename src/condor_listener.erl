@@ -50,7 +50,7 @@
                 mod_state :: term(),
                 lsock :: undefined | sock(),
                 sock :: undefined | sock(),
-                len = 16 :: 8 | 16 | 32,
+                len = 16 :: 8 | 16,
                 buffer = <<>> :: binary()}).
 
 %% -----------------------------------------------------------------------------
