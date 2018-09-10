@@ -30,6 +30,7 @@ stop_listener(Name) ->
 %% -----------------------------------------------------------------------------
 %% internal
 %% -----------------------------------------------------------------------------
+-spec default_opts() -> opts().
 default_opts() ->
     #{
        ip => {127, 0, 0, 1},
@@ -37,11 +38,22 @@ default_opts() ->
        max_acceptors => 100
      }.
 
+-spec start_acceptors(Res, atom(), opts()) ->
+                             Res when Res :: {ok, pid()}
+                                           | {error, term()}.
 start_acceptors({ok, _}=Res, SupName, #{max_acceptors:=Max}) ->
-    [condor_listener_sup:start_child(SupName) || _ <- lists:seq(1, Max)],
+    start_acceptor_n(SupName, Max),
     Res;
 start_acceptors(Else, _, _) ->
     Else.
 
+-spec start_acceptor_n(atom(), integer()) -> ok.
+start_acceptor_n(_, 0) ->
+    ok;
+start_acceptor_n(SupName, N) ->
+    {ok, _} = condor_listener_sup:start_child(SupName),
+    start_acceptor_n(SupName, N - 1).
+
+-spec listener_sup_name(atom()) -> atom().
 listener_sup_name(Name) ->
     list_to_atom("condor_listener_sup_" ++ atom_to_list(Name)).
