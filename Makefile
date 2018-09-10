@@ -1,3 +1,5 @@
+.PHONY: all app shell test dialyze clean distclean
+
 PROJECT = condor
 CT_SUITES = condor
 
@@ -30,31 +32,39 @@ CT_SUITES ?=
 PLT_APPS ?=
 DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions
 
-.PHONY: all app shell test dialyze clean distclean
+BEAM_FILES = \
+	ebin/condor_app.beam \
+	ebin/condor.beam \
+	ebin/condor_listener.beam \
+	ebin/condor_listener_sup.beam \
+	ebin/condor_packet.beam \
+	ebin/condor_sup.beam
 
 all: app
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # build application
-# ------------------------------------------------------------------------------
-app: ebin/ ebin/$(PROJECT).app
+# --------------------------------------------------------------------
+app: $(BEAM_FILES) ebin/$(PROJECT).app
 
-ebin/: $(wildcard src/*.erl)
-	@mkdir -p $(EBIN)
-	$(erlc_verbose) erlc -v -o ebin $(ERLC_OPTS) $?
+ebin:
+	mkdir $@
+
+ebin/%.beam: src/%.erl | ebin
+	$(erlc_verbose) erlc -v $(ERLC_OPTS) -o $(EBIN) $<
 
 ebin/%.app: src/%.app.src
 	cp $< $@
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # run erlang shell
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 shell:
 	erl -pa $(EBIN)
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # run tests
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 test: ERLC_OPTS += -DTEST=1 +export_all
 test: clean app
 	$(gen_verbose) erlc -v -o test $(ERLC_OPTS) \
@@ -63,24 +73,25 @@ test: clean app
 	@$(CT_RUN) -suite $(addsuffix _SUITE,$(CT_SUITES))
 	@rm -f test/*.beam
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # dialyzer
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 dialyze: $(PLT_FILE)
-	@dialyzer +S 8 --src src --plt $(PLT_FILE) --no_native $(DIALYZER_OPTS)
+	@dialyzer +S 8 --src src --plt $(PLT_FILE) \
+		--no_native $(DIALYZER_OPTS)
 
 $(PLT_FILE):
 	$(gen_verbose) dialyzer +S 8 --build_plt --output_plt $@ \
 		--apps erts kernel stdlib $(PLT_APPS)
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # clean application
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 clean:
 	rm -rf $(EBIN) $(CURDIR)/erl_crash.dump
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 # clean project
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------
 distclean: clean
 	rm -rf $(CURDIR)/logs $(CURDIR)/*.beam $(PLT_FILE)
