@@ -29,18 +29,10 @@
        ok.
    #+END_SRC
 
-   #+BEGIN_SRC
-   Name = ping_server,
-   Opts = #{max_acceptors => 100, port => 8890, packet => 1},
-   Module = ping_server,
-   InitialState = [],
-   condor:start_listener(ping_server, Opts, Module, InitialState).
-   #+END_SRC
-
 ** Features
 
    - Reusable supervised connection acceptors
-   - Neat frames/buffers
+   - Neat packet frames and buffers
 
 ** API
 
