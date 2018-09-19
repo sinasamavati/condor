@@ -10,6 +10,7 @@
             ip => inet:ip_address(),
             port => inet:port_number(),
             len => 1 | 2,
+            timeout => non_neg_integer(),
             max_acceptors => non_neg_integer()
            }.
 -export_type([opts/0]).
@@ -36,12 +37,13 @@ default_opts() ->
     #{
        ip => {127, 0, 0, 1},
        len => 2,
+       timeout => 10000,
        max_acceptors => 100
      }.
 
 -spec check_opts(opts()) -> ok | no_return().
-check_opts(#{len:=Len}) when Len > 2 ->
-    exit(badarg, len_too_big);
+check_opts(#{len:=Len}) when Len =< 0; Len > 2 ->
+    exit(badlen);
 check_opts(_) ->
     ok.
 

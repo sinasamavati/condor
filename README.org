@@ -47,12 +47,33 @@
              ip => inet:ip_address(),
              port => inet:port_number(),
              max_acceptors => non_neg_integer(),
-             len => 1 | 2
+             len => 1 | 2,
+             timeout => non_neg_integer()
            }
    Module = atom()
    InitialState = any()
    Pid = pid()
    Reason = any()
+   #+END_SRC
+
+   ~Opts~:
+
+   - ~ip~: to what IP Condor should bind.
+   - ~port~: on what port Condor should listen.
+   - ~max_acceptors~: maximum number of socket acceptors, or in other words,
+     maximum number of concurrent connections.
+   - ~len~: length of the indicator of a packet's size.
+   - ~timeout~: the time limit, in milliseconds, for a packet to be buffered.
+
+   Default ~Opts~:
+
+   #+BEGIN_SRC
+   #{
+      ip => {127, 0, 0, 1},
+      len => 2,
+      timeout => 10000,
+      max_acceptors => 100
+    }
    #+END_SRC
 
 *** Stop a Listener
@@ -93,8 +114,9 @@
     -----                       ---------------
     new connection         ---> Module:init/1
     new packet             ---> Module:handle_packet/2
-    connection termination ---> Module:terminate/2
     receiving a message    ---> Module:handle_info/2
+    packet timeout         ---> Module:handle_info/2
+    connection termination ---> Module:terminate/2
     #+END_SRC
 
     Condor takes care of framing packets. Each packet frame consists of two
@@ -108,7 +130,10 @@
     Condor also takes care of buffering. So, ~Module:handle_packet/2~ is called
     only when an entire packet is received. That is, when ~Packet~ is buffered
     according to the value of ~Len~. ~Len~ will then be stripped off, and only
-    ~Packet~ will be passed to ~Module:handle_packet/2~.
+    ~Packet~ will be passed to ~Module:handle_packet/2~. However, if ~Packet~ is
+    not received completely in ~Timeout~ milliseconds (which would be specified
+    in ~Opts~), ~Module:handle_info/2~ will be invoked with ~Msg~ being
+    ~{timeout, Buffer :: binary()}~.
 
     A callback's ~Result~:
 

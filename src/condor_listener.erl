@@ -23,7 +23,7 @@
 %% -----------------------------------------------------------------------------
 -type sock() :: inet:socket().
 -type packet() :: binary().
--type msg() :: term().
+-type msg() :: {timeout, binary()} | term().
 -type state() :: term().
 -type terminate_reason() :: term().
 
@@ -46,13 +46,17 @@
 
 %% -----------------------------------------------------------------------------
 
--record(state, {mod :: module(),
-                mod_init_state :: term(),
-                mod_state :: term(),
-                lsock :: undefined | sock(),
-                sock :: undefined | sock(),
-                len = 16 :: 8 | 16,
-                buffer = <<>> :: binary()}).
+-record(state, {
+          mod :: module(),
+          mod_init_state :: term(),
+          mod_state :: term(),
+          lsock :: undefined | sock(),
+          sock :: undefined | sock(),
+          len = 16 :: 8 | 16,
+          buffer = <<>> :: binary(),
+          timeout = 10000 :: integer(),
+          timer_ref :: undefined | reference()
+         }).
 
 %% -----------------------------------------------------------------------------
 %% API
@@ -70,13 +74,16 @@ stop(Pid) ->
 %% -----------------------------------------------------------------------------
 %% gen_server callbacks
 %% -----------------------------------------------------------------------------
-init([LSock, Mod, ModInitState, #{len:=Len}]) ->
+init([LSock, Mod, ModInitState, #{len:=Len, timeout:=Timeout}]) ->
     process_flag(trap_exit, true),
     accept(self()),
-    State = #state{mod = Mod,
-                   mod_init_state = ModInitState,
-                   lsock = LSock,
-                   len = Len * 8},
+    State = #state{
+               mod = Mod,
+               mod_init_state = ModInitState,
+               lsock = LSock,
+               len = Len * 8,
+               timeout = Timeout
+              },
     {ok, State}.
 
 handle_call(_Msg, _From, State) ->
@@ -94,20 +101,25 @@ handle_cast(stop, State) ->
 
 handle_info({tcp, Sock, Data},
             #state{len=Len, buffer=Buf,
-                   sock=Sock, mod=Mod, mod_state=ModState}=State) ->
+                   sock=Sock, mod=Mod, mod_state=ModState}=State0) ->
+    %% set a timeout for receiving the packet, if no timeout is set already
+    State = maybe_set_timeout(State0),
+
     NewBuf = <<Buf/binary, Data/binary>>,
-    NewState = case condor_packet:decode(Len, NewBuf) of
-                   {ok, Packet, RestBuf} ->
-                       %% handle_packet/3 callback
-                       handle_callback(
-                         Mod,
-                         handle_packet,
-                         [Packet, ModState],
-                         State#state{buffer = RestBuf}
-                        );
-                   {more, _} ->
-                       State#state{buffer = NewBuf}
-               end,
+    NewState =
+        case condor_packet:decode(Len, NewBuf) of
+            {ok, Packet, RestBuf} ->
+                State1 = cancel_timeout(State),
+                %% handle_packet/3 callback
+                handle_callback(
+                  Mod,
+                  handle_packet,
+                  [Packet, ModState],
+                  State1#state{buffer = RestBuf}
+                 );
+            {more, _} ->
+                State#state{buffer = NewBuf}
+        end,
     ok = inet:setopts(Sock, [{active, once}]),
     {noreply, NewState};
 handle_info({tcp_error, Reason, Sock},
@@ -122,6 +134,11 @@ handle_info({tcp_closed, Sock},
     accept(self()),
     NewState = handle_callback(Mod, terminate, [tcp_closed, ModState], State),
     {noreply, NewState};
+handle_info({timeout, _, packet_timeout},
+            #state{mod=Mod, mod_state=ModState, buffer=Buf}=State) ->
+    NewState =
+        handle_callback(Mod, handle_info, [{timeout, Buf}, ModState], State),
+    {noreply, NewState#state{buffer = <<>>, timer_ref = undefined}};
 handle_info(Msg, #state{mod=Mod, mod_state=ModState}=State) ->
     %% handle_info/2 callback
     NewState = handle_callback(Mod, handle_info, [Msg, ModState], State),
@@ -166,3 +183,13 @@ handle_callback(M, F, A, State) ->
 send(Data0, #state{len=L, sock=Sock}) ->
     Data = condor_packet:encode(L, Data0),
     gen_tcp:send(Sock, Data).
+
+maybe_set_timeout(#state{timer_ref=undefined, timeout=Timeout}=State) ->
+    TimerRef = erlang:start_timer(Timeout, self(), packet_timeout),
+    State#state{timer_ref = TimerRef};
+maybe_set_timeout(State) ->
+    State.
+
+cancel_timeout(#state{timer_ref=TimerRef}=State) ->
+    catch erlang:cancel_timer(TimerRef),
+    State#state{timer_ref = undefined}.

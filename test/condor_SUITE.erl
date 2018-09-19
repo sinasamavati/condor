@@ -5,12 +5,13 @@
 -export([end_per_suite/1]).
 -export([all/0]).
 -export([echo_test/1]).
+-export([timeout_test/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
 init_per_suite(Config) ->
     ok = application:start(condor),
-    Port = crypto:rand_uniform(3000, 9999),
+    Port = rand_port(),
     Opts = #{port => Port, max_acceptors => 5, len => 2},
     {ok, _} = condor:start_listener(echo_server, Opts, ?MODULE, []),
     [{port, Port} | Config].
@@ -22,7 +23,8 @@ end_per_suite(_Config) ->
 all() ->
     [
      condor_packet,
-     echo_test
+     echo_test,
+     timeout_test
     ].
 
 condor_packet(_) ->
@@ -64,9 +66,79 @@ echo_test(Config) ->
     ok = gen_tcp:close(Sock1),
     ok.
 
+timeout_test(_Config) ->
+    ok = application:ensure_started(condor),
+    Port = rand_port(),
+    Opts = #{port => Port, len => 2, timeout => 20, max_acceptors => 5},
+    {ok, _} = condor:start_listener(timeout_server, Opts, ?MODULE, []),
+
+    %% let timeout trigger by not sending the entire packet
+    {ok, Sock0} = gen_tcp:connect("localhost", Port, [binary]),
+    <<Pkt0:64/binary, _/binary>> = condor_packet:encode(16, binary:copy(<<"A">>, 128)),
+    ok = gen_tcp:send(Sock0, Pkt0),
+    receive
+        {tcp, Sock0, <<_:16, Pkt0/binary>>} ->
+            ok
+    after 30 ->
+            exit(not_received)
+    end,
+
+    %% send two chunks of packet, and let the timeout trigger
+    {ok, Sock1} = gen_tcp:connect("localhost", Port, [binary]),
+    <<Pkt1:64/binary, Pkt2:64/binary, _/binary>> =
+        condor_packet:encode(16, binary:copy(<<"XYZ">>, 256)),
+    ok = gen_tcp:send(Sock1, Pkt1),
+    ok = timer:sleep(10),
+    ok = gen_tcp:send(Sock1, Pkt2),
+    receive
+        {tcp, Sock1, <<_:16, Pkt1:64/binary, Pkt2:64/binary>>} ->
+            ok
+    after 30 ->
+            exit(not_received)
+    end,
+
+    %% send the entire packet in three chunks, and do not trigger timeout
+    {ok, Sock2} = gen_tcp:connect("localhost", Port, [binary]),
+    Pkt3 = condor_packet:encode(16, binary:copy(<<"XYZ">>, 256)),
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 0, 64)),
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 64, 64)),
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 128, byte_size(Pkt3) - 128)),
+    receive
+        {tcp, Sock2, Pkt3} ->
+            ok
+    after 30 ->
+            exit(not_received)
+    end,
+
+    %% send the entire packet in three chunks with a bit of pause in between.
+    %% this will trigger timeout, because the packet won't be sent completely
+    %% in 20 milliseconds
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 0, 64)),
+    ok = timer:sleep(10),
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 64, 64)),
+    ok = timer:sleep(10),
+    ok = gen_tcp:send(Sock2, binary:part(Pkt3, 128, byte_size(Pkt3) - 128)),
+    receive
+        {tcp, Sock2, Pkt3} ->
+            exit(should_not_receive_full_packet);
+        {tcp, Sock2, _Buf} ->
+            ok
+    after 30 ->
+            exit(not_received)
+    end,
+
+    ok = gen_tcp:close(Sock0),
+    ok = gen_tcp:close(Sock1),
+    ok = gen_tcp:close(Sock2),
+    ok = condor:stop_listener(timeout_server),
+    ok.
+
 %% -----------------------------------------------------------------------------
 %% internal
 %% -----------------------------------------------------------------------------
+rand_port() ->
+    erlang:system_time() rem 10000.
+
 loop_recv(Sock) ->
     loop_recv(Sock, <<>>).
 
@@ -89,6 +161,8 @@ handle_packet(<<"send_and_stop">> = Data, State) ->
 handle_packet(Echo, State) ->
     {send, Echo, State}.
 
+handle_info({timeout, Buf}, State) ->
+    {send, Buf, State};
 handle_info(_MSg, State) ->
     {ok, State}.
 
