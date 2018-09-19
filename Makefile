@@ -7,7 +7,7 @@ EBIN = $(CURDIR)/ebin
 TEST_DIR = $(CURDIR)/test
 PLT_FILE = $(CURDIR)/.$(PROJECT).plt
 
-ERLC_OPTS += +debug_info +warn_export_all +warn_export_vars \
+ERLC_OPTS += -Werror +debug_info +warn_export_all +warn_export_vars \
 	+warn_shadow_vars +warn_obsolete_guard
 
 V ?= 0
