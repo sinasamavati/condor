@@ -2,7 +2,7 @@
 
 {application, condor,
  [{description, ""},
-  {vsn, "0.3.0"},
+  {vsn, "0.3.1"},
   {licenses, ["Apache 2.0"]},
   {applications,
    [kernel,
