@@ -1,7 +1,6 @@
 .PHONY: all app shell test dialyze clean distclean
 
 PROJECT = condor
-CT_SUITES = condor
 
 EBIN = $(CURDIR)/ebin
 TEST_DIR = $(CURDIR)/test
@@ -27,8 +26,6 @@ CT_RUN = ct_run \
 	-logdir logs \
 	$(CT_OPTS)
 
-CT_SUITES ?=
-
 PLT_APPS ?=
 DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions
 
@@ -40,21 +37,17 @@ BEAM_FILES = \
 	ebin/condor_packet.beam \
 	ebin/condor_sup.beam
 
-all: app
+CT_SUITES ?= condor
+
+all: compile
 
 # --------------------------------------------------------------------
-# build application
+# compile
 # --------------------------------------------------------------------
-app: $(BEAM_FILES) ebin/$(PROJECT).app
+compile: $(BEAM_FILES)
 
-ebin:
-	mkdir $@
-
-ebin/%.beam: src/%.erl | ebin
+ebin/%.beam: src/%.erl
 	$(erlc_verbose) erlc -v $(ERLC_OPTS) -o $(EBIN) $<
-
-ebin/%.app: src/%.app.src
-	cp $< $@
 
 # --------------------------------------------------------------------
 # run erlang shell
@@ -66,7 +59,7 @@ shell:
 # run tests
 # --------------------------------------------------------------------
 test: ERLC_OPTS += -DTEST=1 +export_all
-test: clean app
+test: clean compile
 	$(gen_verbose) erlc -v -o test $(ERLC_OPTS) \
 		$(wildcard test/*.erl test/*/*.erl) -pa ebin
 	@mkdir -p logs
@@ -85,13 +78,13 @@ $(PLT_FILE):
 		--apps erts kernel stdlib $(PLT_APPS)
 
 # --------------------------------------------------------------------
-# clean application
+# clean compiled files
 # --------------------------------------------------------------------
 clean:
-	rm -rf $(EBIN) $(CURDIR)/erl_crash.dump
+	rm -rf $(EBIN)/*.beam $(CURDIR)/erl_crash.dump
 
 # --------------------------------------------------------------------
 # clean project
 # --------------------------------------------------------------------
 distclean: clean
-	rm -rf $(CURDIR)/logs $(CURDIR)/*.beam $(PLT_FILE)
+	rm -rf $(CURDIR)/logs $(PLT_FILE)
